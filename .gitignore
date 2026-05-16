@@ -23,3 +23,13 @@ yarn-debug.log*
 yarn-error.log*
 
  
+.env
+Backend/.env
+Frontend/.env
+node_modules/
+Backend/node_modules/
+Frontend/node_modules/
+dist/
+build/
+Frontend/build/
+*.log

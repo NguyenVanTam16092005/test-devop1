@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  backend:
+    container_name: ${BACKEND_CONTAINER_NAME:-student-management-backend}
+    build:
+      context: ./Backend
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB}/${NAME_BACKEND}:${DOCKER_TAG:-1.0.0}
+    ports:
+      - "${BACKEND_PORT:-8081}:80"
+    environment:
+      - NODE_ENV=${NODE_ENV:-production}
+      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/student-management}
+      - PORT=80
+    depends_on:
+      - mongo
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:80', (r) => {if (r.statusCode !== 200) throw new Error(r.statusCode)})"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  frontend:
+    container_name: ${FRONTEND_CONTAINER_NAME:-student-management-frontend}
+    build:
+      context: ./Frontend
+      dockerfile: Dockerfile
+    image: ${DOCKER_HUB}/${NAME_FRONTEND}:${DOCKER_TAG:-1.0.0}
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    environment:
+      - VITE_API_URL=${VITE_API_URL:-http://localhost:8081}
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/index.html"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  mongo:
+    image: mongo:5.0-alpine
+    container_name: ${MONGO_CONTAINER_NAME:-student-management-mongo}
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USERNAME:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-admin123}
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    networks:
+      - app-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+networks:
+  app-network:
+    driver: bridge
+
+volumes:
+  mongo_data:
+    driver: local
