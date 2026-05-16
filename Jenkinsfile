@@ -59,19 +59,6 @@ pipeline {
         githubPush()
     }
 
-    post {
-        // Các hành động luôn được thực hiện
-        always {
-            echo "✏️ Pipeline kết thúc cho nhánh: ${COMPUTED_BRANCH}"
-        }
-        success {
-            echo "✅ Pipeline thành công!"
-        }
-        failure {
-            echo "❌ Pipeline thất bại!"
-        }
-    }
-
     stages {
         // ========================================
         // GIAI ĐOẠN 1: CHECKOUT - Lấy mã nguồn
@@ -431,6 +418,19 @@ pipeline {
                     '''
                 }
             }
+        }
+    }
+
+    post {
+        // Các hành động luôn được thực hiện
+        always {
+            echo "✏️ Pipeline kết thúc cho nhánh: ${COMPUTED_BRANCH}"
+        }
+        success {
+            echo "✅ Pipeline thành công!"
+        }
+        failure {
+            echo "❌ Pipeline thất bại!"
         }
     }
 }
