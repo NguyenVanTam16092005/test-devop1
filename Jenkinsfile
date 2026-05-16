@@ -48,7 +48,7 @@ pipeline {
     }
 
     triggers {
-    gitlabPush()
+    githubPush()
 }
 
     post {
