@@ -48,13 +48,7 @@ pipeline {
     }
 
     triggers {
-    gitlabPush(
-        triggerOnPush: true,
-        triggerOnMergeRequest: true,
-        branchFilterType: 'NameBasedFilter',
-        includeBranchesSpec: 'main|staging|develop',
-        excludeBranchesSpec: ''
-    )
+    gitlabPush()
 }
 
     post {
