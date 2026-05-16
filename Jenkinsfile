@@ -424,7 +424,7 @@ pipeline {
     post {
         // Các hành động luôn được thực hiện
         always {
-            echo "✏️ Pipeline kết thúc cho nhánh: ${COMPUTED_BRANCH}"
+            echo "✏️ Pipeline kết thúc cho nhánh: ${env.COMPUTED_BRANCH ?: 'unknown'}"
         }
         success {
             echo "✅ Pipeline thành công!"
