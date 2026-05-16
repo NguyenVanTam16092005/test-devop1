@@ -14,14 +14,13 @@ pipeline {
         PROJECT_NAME = 'student-management'
         NAME_BACKEND = 'backend'
         NAME_FRONTEND = 'frontend'
-        // Compute BRANCH_NAME from GIT_BRANCH (converts origin/main to main)
-        COMPUTED_BRANCH = "${GIT_BRANCH?.replaceAll('^origin/', '') ?: 'unknown'}"
-        BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${COMPUTED_BRANCH}"
-        FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${COMPUTED_BRANCH}"
-        MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${COMPUTED_BRANCH}"
         
-        // Tag Configuration - using branch name and short commit hash
-        DOCKER_TAG = "${COMPUTED_BRANCH.replace('/', '-')}-${GIT_COMMIT.take(7)}"
+        // Branch and Tag (will be set in Checkout stage)
+        COMPUTED_BRANCH = 'unknown'
+        DOCKER_TAG = 'unknown'
+        BACKEND_CONTAINER_NAME = 'unknown'
+        FRONTEND_CONTAINER_NAME = 'unknown'
+        MONGO_CONTAINER_NAME = 'unknown'
         
         // Database Configuration
         DB_HOST = '10.32.3.170'
@@ -68,12 +67,20 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo "🔄 Checking out code from ${COMPUTED_BRANCH}"
                 checkout scm
                 script {
+                    // Extract branch name from GIT_BRANCH (e.g., origin/main -> main)
+                    def branchName = env.GIT_BRANCH?.replaceAll('^origin/', '') ?: 'unknown'
+                    env.COMPUTED_BRANCH = branchName
+                    env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
+                    env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
+                    env.FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${branchName}"
+                    env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
+                    
                     env.GIT_COMMIT_MSG = sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
                     env.GIT_AUTHOR = sh(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
                 }
+                echo "🔄 Checking out code from ${COMPUTED_BRANCH}"
                 echo "Commit: ${GIT_COMMIT}"
                 echo "Author: ${GIT_AUTHOR}"
                 echo "Message: ${GIT_COMMIT_MSG}"
