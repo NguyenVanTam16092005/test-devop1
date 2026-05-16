@@ -10,8 +10,8 @@ pipeline {
 
     environment {
         // Cấu hình Docker Hub - Credentials để đăng nhập và push image
-        DOCKER_HUB = credentials('docker-hub-username')
-        DOCKERHUB_CREDENTIALS = credentials('docker-hub-credentials')
+        // DOCKER_HUB = credentials('docker-hub-username')
+        // DOCKERHUB_CREDENTIALS = credentials('docker-hub-credentials')
         
         // Cấu hình dự án - Tên ứng dụng và các thành phần
         PROJECT_NAME = 'student-management'
@@ -35,9 +35,12 @@ pipeline {
         DEPLOY_USER = 'root'
         SSH_CREDENTIALS = 'jenkins-ssh-key'
         
+        // Docker Hub - sẽ được set từ credentials khi deploy
+        DOCKER_HUB = 'dockerhub-username'
+        
         // Cấu hình SonarQube - Phân tích chất lượng mã
         SONAR_HOST_URL = 'http://10.32.3.171:9000'
-        SONAR_TOKEN = credentials('sonarqube-token')
+        SONAR_TOKEN = 'sonarqube-token-placeholder'
         SONAR_PROJECT_KEY = 'student-management'
         
         // Cấu hình GitLab (nếu sử dụng)
