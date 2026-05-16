@@ -54,7 +54,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished for branch: ${COMPUTED_BRANCH}"
+            echo "Pipeline finished for branch: ${GIT_BRANCH}"
         }
         success {
             echo "✅ Pipeline succeeded!"
@@ -89,10 +89,8 @@ pipeline {
 
         stage('Build Backend') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
-                    branch 'develop'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
                 }
             }
             steps {
@@ -110,10 +108,8 @@ pipeline {
 
         stage('Build Frontend') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
-                    branch 'develop'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
                 }
             }
             steps {
@@ -131,10 +127,8 @@ pipeline {
 
         stage('Test Backend') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
-                    branch 'develop'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
                 }
             }
             steps {
@@ -155,9 +149,8 @@ pipeline {
 
         stage('Code Quality Analysis') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
                 }
             }
             steps {
@@ -180,9 +173,8 @@ pipeline {
 
         stage('Push to Docker Hub') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
                 }
             }
             steps {
@@ -203,7 +195,9 @@ pipeline {
 
         stage('Database Migration') {
             when {
-                branch 'staging'
+                expression {
+                    return env.GIT_BRANCH == 'origin/staging'
+                }
             }
             steps {
                 echo "🗄️ Preparing Database Migration"
@@ -229,7 +223,9 @@ pipeline {
 
         stage('Deploy to Staging') {
             when {
-                branch 'staging'
+                expression {
+                    return env.GIT_BRANCH == 'origin/staging'
+                }
             }
             steps {
                 echo "🚀 Deploying to Staging Environment"
@@ -286,7 +282,9 @@ pipeline {
 
         stage('Deploy to Production') {
             when {
-                branch 'main'
+                expression {
+                    return env.GIT_BRANCH == 'origin/main'
+                }
             }
             steps {
                 echo "🚀 Deploying to Production Environment"
@@ -359,9 +357,8 @@ pipeline {
 
         stage('Smoke Tests') {
             when {
-                anyOf {
-                    branch 'staging'
-                    branch 'main'
+                expression {
+                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
                 }
             }
             steps {
@@ -372,7 +369,8 @@ pipeline {
                         sleep 15
                         
                         DEPLOY_SERVER="${STAGING_SERVER}"
-                        if [ "${COMPUTED_BRANCH}" = "main" ]; then
+                        BRANCH_NAME=$(echo "${GIT_BRANCH}" | sed 's|^origin/||')
+                        if [ "${BRANCH_NAME}" = "main" ]; then
                             DEPLOY_SERVER="${PRODUCTION_SERVER}"
                         fi
                         
