@@ -71,15 +71,15 @@ pipeline {
                 checkout scm
                 script {
                     // Trích xuất tên nhánh từ lệnh git (hoạt động cho cả multibranch và non-multibranch pipelines)
-                    def branchName = bat(returnStdout: true, script: '@echo off & git rev-parse --abbrev-ref HEAD').trim()
+                    def branchName = powershell(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
                     env.COMPUTED_BRANCH = branchName
                     env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
                     env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
                     env.FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${branchName}"
                     env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
                     
-                    env.GIT_COMMIT_MSG = bat(returnStdout: true, script: '@echo off & git log -1 --pretty=%B').trim()
-                    env.GIT_AUTHOR = bat(returnStdout: true, script: '@echo off & git log -1 --pretty=%an').trim()
+                    env.GIT_COMMIT_MSG = powershell(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
+                    env.GIT_AUTHOR = powershell(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
                 }
                 echo "🔄 Đang checkout mã từ nhánh: ${COMPUTED_BRANCH}"
                 echo "Commit: ${GIT_COMMIT}"
