@@ -9,8 +9,8 @@ services:
     ports:
       - "${BACKEND_PORT:-8081}:80"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - MONGODB_URI=${MONGODB_URI:-mongodb://mongo:27017/student-management}
+      - NODE_ENV=production
+      - MONGODB_URL=mongodb://admin:admin123@mongo:27017/student-management?authSource=admin
       - PORT=80
     depends_on:
       - mongo
@@ -61,8 +61,15 @@ services:
     networks:
       - app-network
     healthcheck:
-    test: echo 'db.runCommand("ping").ok' | mongo localhost:27017/admin -u admin -p admin123 --authenticationDatabase admin --quiet
-    interval: 30s
-    timeout: 10s
-    retries: 3
-    start_period: 20s
+      test: ["CMD-SHELL", "echo 'db.runCommand(\"ping\").ok' | mongo localhost:27017/admin -u admin -p admin123 --authenticationDatabase admin --quiet"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+volumes:
+  mongo_data:
+
+networks:
+  app-network:
+    driver: bridge
