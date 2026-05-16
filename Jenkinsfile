@@ -14,12 +14,14 @@ pipeline {
         PROJECT_NAME = 'student-management'
         NAME_BACKEND = 'backend'
         NAME_FRONTEND = 'frontend'
-        BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${BRANCH_NAME}"
-        FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${BRANCH_NAME}"
-        MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${BRANCH_NAME}"
+        // Compute BRANCH_NAME from GIT_BRANCH (converts origin/main to main)
+        COMPUTED_BRANCH = "${GIT_BRANCH?.replaceAll('^origin/', '') ?: 'unknown'}"
+        BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${COMPUTED_BRANCH}"
+        FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${COMPUTED_BRANCH}"
+        MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${COMPUTED_BRANCH}"
         
         // Tag Configuration - using branch name and short commit hash
-        DOCKER_TAG = "${BRANCH_NAME.replace('/', '-')}-${GIT_COMMIT.take(7)}"
+        DOCKER_TAG = "${COMPUTED_BRANCH.replace('/', '-')}-${GIT_COMMIT.take(7)}"
         
         // Database Configuration
         DB_HOST = '10.32.3.170'
@@ -53,7 +55,7 @@ pipeline {
 
     post {
         always {
-            echo "Pipeline finished for branch: ${BRANCH_NAME}"
+            echo "Pipeline finished for branch: ${COMPUTED_BRANCH}"
         }
         success {
             echo "✅ Pipeline succeeded!"
@@ -66,7 +68,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                echo "🔄 Checking out code from ${BRANCH_NAME}"
+                echo "🔄 Checking out code from ${COMPUTED_BRANCH}"
                 checkout scm
                 script {
                     env.GIT_COMMIT_MSG = sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
@@ -363,7 +365,7 @@ pipeline {
                         sleep 15
                         
                         DEPLOY_SERVER="${STAGING_SERVER}"
-                        if [ "${BRANCH_NAME}" = "main" ]; then
+                        if [ "${COMPUTED_BRANCH}" = "main" ]; then
                             DEPLOY_SERVER="${PRODUCTION_SERVER}"
                         fi
                         
