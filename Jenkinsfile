@@ -1,76 +1,87 @@
+// Pipeline CI/CD cho hệ thống quản lý sinh viên - Student Management System
+// Hỗ trợ tự động build, test, và deploy ứng dụng
+
 pipeline {
     agent any
 
     parameters {
-        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Select deployment environment')
+        choice(name: 'ENVIRONMENT', choices: ['staging', 'production'], description: 'Chọn môi trường deploy: staging hoặc production')
     }
 
     environment {
-        // Docker Hub Configuration
+        // Cấu hình Docker Hub - Credentials để đăng nhập và push image
         DOCKER_HUB = credentials('docker-hub-username')
         DOCKERHUB_CREDENTIALS = credentials('docker-hub-credentials')
         
-        // Project Configuration
+        // Cấu hình dự án - Tên ứng dụng và các thành phần
         PROJECT_NAME = 'student-management'
         NAME_BACKEND = 'backend'
         NAME_FRONTEND = 'frontend'
         
-        // Branch and Tag (will be set in Checkout stage)
+        // Nhánh và thẻ phiên bản (sẽ được thiết lập ở giai đoạn Checkout)
         COMPUTED_BRANCH = 'unknown'
         DOCKER_TAG = 'unknown'
         BACKEND_CONTAINER_NAME = 'unknown'
         FRONTEND_CONTAINER_NAME = 'unknown'
         MONGO_CONTAINER_NAME = 'unknown'
         
-        // Database Configuration
+        // Cấu hình cơ sở dữ liệu MongoDB
         DB_HOST = '10.32.3.170'
         DB_PORT = '27017'
         
-        // Deployment Servers
+        // Địa chỉ máy chủ deploy (staging và production)
         STAGING_SERVER = '10.32.3.172'
         PRODUCTION_SERVER = '10.32.3.173'
         DEPLOY_USER = 'root'
         SSH_CREDENTIALS = 'jenkins-ssh-key'
         
-        // SonarQube Configuration
+        // Cấu hình SonarQube - Phân tích chất lượng mã
         SONAR_HOST_URL = 'http://10.32.3.171:9000'
         SONAR_TOKEN = credentials('sonarqube-token')
         SONAR_PROJECT_KEY = 'student-management'
         
-        // GitLab Configuration
+        // Cấu hình GitLab (nếu sử dụng)
         GITLAB_URL = 'http://10.32.4.111:8090'
         GITLAB_PROJECT = 'your-group/student-management'
     }
 
     options {
+        // Giữ lại tối đa 10 build gần nhất
         buildDiscarder(logRotator(numToKeepStr: '10'))
+        // Hết thời gian chờ sau 1 giờ
         timeout(time: 1, unit: 'HOURS')
+        // Hiển thị dấu thời gian cho mỗi thao tác
         timestamps()
     }
 
     triggers {
-    githubPush()
-}
+        // Kích hoạt pipeline khi có push từ GitHub
+        githubPush()
+    }
 
     post {
+        // Các hành động luôn được thực hiện
         always {
-            echo "Pipeline finished for branch: ${GIT_BRANCH}"
+            echo "✏️ Pipeline kết thúc cho nhánh: ${COMPUTED_BRANCH}"
         }
         success {
-            echo "✅ Pipeline succeeded!"
+            echo "✅ Pipeline thành công!"
         }
         failure {
-            echo "❌ Pipeline failed!"
+            echo "❌ Pipeline thất bại!"
         }
     }
 
     stages {
+        // ========================================
+        // GIAI ĐOẠN 1: CHECKOUT - Lấy mã nguồn
+        // ========================================
         stage('Checkout') {
             steps {
                 checkout scm
                 script {
-                    // Extract branch name from GIT_BRANCH (e.g., origin/main -> main)
-                    def branchName = env.GIT_BRANCH?.replaceAll('^origin/', '') ?: 'unknown'
+                    // Trích xuất tên nhánh từ lệnh git (hoạt động cho cả multibranch và non-multibranch pipelines)
+                    def branchName = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
                     env.COMPUTED_BRANCH = branchName
                     env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
                     env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
@@ -80,21 +91,25 @@ pipeline {
                     env.GIT_COMMIT_MSG = sh(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
                     env.GIT_AUTHOR = sh(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
                 }
-                echo "🔄 Checking out code from ${COMPUTED_BRANCH}"
+                echo "🔄 Đang checkout mã từ nhánh: ${COMPUTED_BRANCH}"
                 echo "Commit: ${GIT_COMMIT}"
-                echo "Author: ${GIT_AUTHOR}"
-                echo "Message: ${GIT_COMMIT_MSG}"
+                echo "Người commit: ${GIT_AUTHOR}"
+                echo "Tin nhắn: ${GIT_COMMIT_MSG}"
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 2: BUILD BACKEND
+        // Build Docker image cho phần Backend
+        // ========================================
         stage('Build Backend') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main|develop)/
                 }
             }
             steps {
-                echo "🔨 Building Backend Docker image"
+                echo "🔨 Đang build Docker image cho Backend"
                 dir('Backend') {
                     script {
                         sh '''
@@ -106,14 +121,18 @@ pipeline {
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 3: BUILD FRONTEND
+        // Build Docker image cho phần Frontend
+        // ========================================
         stage('Build Frontend') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main|develop)/
                 }
             }
             steps {
-                echo "🔨 Building Frontend Docker image"
+                echo "🔨 Đang build Docker image cho Frontend"
                 dir('Frontend') {
                     script {
                         sh '''
@@ -125,36 +144,44 @@ pipeline {
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 4: TEST BACKEND
+        // Chạy các bài kiểm tra cho Backend
+        // ========================================
         stage('Test Backend') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main|develop)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main|develop)/
                 }
             }
             steps {
-                echo "🧪 Running Backend Tests"
+                echo "🧪 Đang chạy các bài kiểm tra Backend"
                 dir('Backend') {
                     script {
                         sh '''
-                            echo "Running Backend tests..."
+                            echo "Đang chạy kiểm tra Backend..."
                             npm install
-                            # Add your test command here
+                            # Thêm lệnh kiểm tra của bạn ở đây
                             # npm test
-                            echo "Backend tests completed"
+                            echo "Kiểm tra Backend hoàn tất"
                         '''
                     }
                 }
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 5: PHÂN TÍCH CHẤT LƯỢNG MÃ
+        // Sử dụng SonarQube để phân tích mã
+        // ========================================
         stage('Code Quality Analysis') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main)/
                 }
             }
             steps {
-                echo "📊 Running SonarQube Analysis"
+                echo "📊 Đang chạy phân tích SonarQube"
                 script {
                     sh '''
                         docker run -v "$(pwd)":/app --workdir="/app" \
@@ -171,14 +198,18 @@ pipeline {
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 6: PUSH ĐẾN DOCKER HUB
+        // Đẩy Docker images lên Docker Hub
+        // ========================================
         stage('Push to Docker Hub') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main)/
                 }
             }
             steps {
-                echo "🚀 Pushing Docker images to Docker Hub"
+                echo "🚀 Đang đẩy Docker images lên Docker Hub"
                 script {
                     sh '''
                         echo ${DOCKERHUB_CREDENTIALS_PSW} | docker login -u ${DOCKERHUB_CREDENTIALS_USR} --password-stdin
@@ -187,48 +218,56 @@ pipeline {
                         docker push ${DOCKER_HUB}/${NAME_FRONTEND}:${DOCKER_TAG}
                         docker push ${DOCKER_HUB}/${NAME_FRONTEND}:latest
                         docker logout
-                        echo "Images pushed successfully"
+                        echo "Đã đẩy images thành công"
                     '''
                 }
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 7: MIGRATION CƠ SỞ DỮ LIỆU
+        // Chạy migration database (chỉ cho staging)
+        // ========================================
         stage('Database Migration') {
             when {
                 expression {
-                    return env.GIT_BRANCH == 'origin/staging'
+                    return env.COMPUTED_BRANCH == 'staging'
                 }
             }
             steps {
-                echo "🗄️ Preparing Database Migration"
+                echo "🗄️ Chuẩn bị Database Migration"
                 script {
                     def userInput = input(
                         id: 'DBMigration',
-                        message: 'Do you want to run database migration?',
+                        message: 'Bạn có muốn chạy database migration không?',
                         parameters: [
-                            choice(name: 'Migration', choices: 'no\nyes', description: 'Select option')
+                            choice(name: 'Migration', choices: 'không\ncó', description: 'Chọn tùy chọn')
                         ]
                     )
                     
-                    if (userInput == 'yes') {
-                        echo "Executing database migration for staging environment..."
-                        // Add your migration commands here
-                        echo "Migration completed"
+                    if (userInput == 'có') {
+                        echo "Đang thực hiện migration database cho môi trường staging..."
+                        // Thêm các lệnh migration của bạn ở đây
+                        echo "Migration hoàn tất"
                     } else {
-                        echo "Skipping database migration"
+                        echo "Bỏ qua database migration"
                     }
                 }
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 8: DEPLOY ĐẾN STAGING
+        // Deploy ứng dụng đến máy chủ staging
+        // ========================================
         stage('Deploy to Staging') {
             when {
                 expression {
-                    return env.GIT_BRANCH == 'origin/staging'
+                    return env.COMPUTED_BRANCH == 'staging'
                 }
             }
             steps {
-                echo "🚀 Deploying to Staging Environment"
+                echo "🚀 Đang deploy đến môi trường Staging"
                 script {
                     def deploying = '''
                         #!/bin/bash
@@ -280,21 +319,25 @@ pipeline {
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 9: DEPLOY ĐẾN PRODUCTION
+        // Deploy ứng dụng đến máy chủ production
+        // ========================================
         stage('Deploy to Production') {
             when {
                 expression {
-                    return env.GIT_BRANCH == 'origin/main'
+                    return env.COMPUTED_BRANCH == 'main'
                 }
             }
             steps {
-                echo "🚀 Deploying to Production Environment"
+                echo "🚀 Đang deploy đến môi trường Production"
                 script {
-                    // Request approval before production deployment
+                    // Yêu cầu phê duyệt trước khi deploy production
                     def userInput = input(
                         id: 'ProductionDeploy',
-                        message: 'Do you want to deploy to PRODUCTION?',
+                        message: 'Bạn có muốn deploy đến PRODUCTION không?',
                         parameters: [
-                            choice(name: 'Deploy', choices: 'no\nyes', description: 'Select option')
+                            choice(name: 'Deploy', choices: 'không\ncó', description: 'Chọn tùy chọn')
                         ]
                     )
                     
@@ -346,30 +389,34 @@ pipeline {
                             '''
                         }
                         
-                        echo "✅ Production deployment completed!"
+                        echo "✅ Đã hoàn tất deployment production!"
                     } else {
-                        echo "Production deployment cancelled by user"
+                        echo "Deployment production bị hủy bởi người dùng"
                         currentBuild.result = 'UNSTABLE'
                     }
                 }
             }
         }
 
+        // ========================================
+        // GIAI ĐOẠN 10: SMOKE TESTS
+        // Chạy các bài kiểm tra nhanh
+        // ========================================
         stage('Smoke Tests') {
             when {
                 expression {
-                    return env.GIT_BRANCH ==~ /^origin\/(staging|main)$/
+                    return env.COMPUTED_BRANCH ==~ /(staging|main)/
                 }
             }
             steps {
-                echo "🧪 Running Smoke Tests"
+                echo "🧪 Đang chạy Smoke Tests"
                 script {
                     sh '''
-                        echo "Waiting for services to be ready..."
+                        echo "Đang chờ các dịch vụ sẵn sàng..."
                         sleep 15
                         
                         DEPLOY_SERVER="${STAGING_SERVER}"
-                        BRANCH_NAME=$(echo "${GIT_BRANCH}" | sed 's|^origin/||')
+                        BRANCH_NAME="${COMPUTED_BRANCH}"
                         if [ "${BRANCH_NAME}" = "main" ]; then
                             DEPLOY_SERVER="${PRODUCTION_SERVER}"
                         fi
