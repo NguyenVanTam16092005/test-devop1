@@ -82,6 +82,8 @@ pipeline {
                     env.GIT_AUTHOR = powershell(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
                 }
                 echo "🔄 Đang checkout mã từ nhánh: ${COMPUTED_BRANCH}"
+                echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
+                echo "🔍 DEBUG - DOCKER_TAG = ${env.DOCKER_TAG}"
                 echo "Commit: ${GIT_COMMIT}"
                 echo "Người commit: ${GIT_AUTHOR}"
                 echo "Tin nhắn: ${GIT_COMMIT_MSG}"
