@@ -69,47 +69,54 @@ pipeline {
     steps {
         checkout scm
         script {
-            // 1) Ưu tiên lấy từ Jenkins env (Multibranch có BRANCH_NAME, Pipeline thường hay có GIT_BRANCH)
-            String branchName = (env.BRANCH_NAME ?: env.GIT_BRANCH ?: env.CHANGE_BRANCH ?: '').trim()
-
-            // 2) Chuẩn hoá: origin/develop -> develop
-            if (branchName.contains('/')) {
-                branchName = branchName.tokenize('/').last()
-            }
-
-            // 3) Nếu vẫn rỗng hoặc HEAD (detached), dò branch chứa commit hiện tại
-            if (!branchName || branchName == 'HEAD') {
+            // Đọc branch name từ .git/HEAD hoặc git command
+            String branchName = 'unknown'
+            
+            try {
+                // Phương pháp 1: Dùng git rev-parse (RECOMMENDED - hoạt động trên Windows)
+                branchName = sh(
+                    returnStdout: true,
+                    script: 'git rev-parse --abbrev-ref HEAD'
+                ).trim()
+                echo "✅ Branch detected via git rev-parse: ${branchName}"
+            } catch (Exception e1) {
                 try {
-                    branchName = powershell(
-                        returnStdout: true,
-                        script: '''
-                            $b = git branch -r --contains HEAD | Select-String "origin/" | Select-Object -First 1
-                            if ($b) { $b.ToString().Trim().Replace("origin/","") } else { "develop" }
-                        '''
-                    ).trim()
-                } catch (Exception e) {
-                    echo "⚠️ Could not detect branch, fallback develop"
-                    branchName = 'develop'
+                    // Phương pháp 2: Đọc trực tiếp từ .git/HEAD file
+                    String headFile = readFile('.git/HEAD').trim()
+                    if (headFile.startsWith('ref: ')) {
+                        branchName = headFile.replace('ref: refs/heads/', '').trim()
+                        echo "✅ Branch detected from .git/HEAD: ${branchName}"
+                    }
+                } catch (Exception e2) {
+                    // Phương pháp 3: Fallback
+                    branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'develop'
+                    if (branchName.contains('/')) {
+                        branchName = branchName.tokenize('/').last()
+                    }
+                    echo "⚠️ Branch fallback to: ${branchName}"
                 }
             }
-
-            // 4) Set env để các stage when{} dùng được
+            
+            // Normalize: loại bỏ "origin/" prefix nếu có
+            if (branchName.contains('origin/')) {
+                branchName = branchName.replace('origin/', '')
+            }
+            
+            // Set environment variables
             env.COMPUTED_BRANCH = branchName
-
             String shortCommit = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
             env.DOCKER_TAG = "${branchName.replace('/', '-')}-${shortCommit}"
-
+            
             env.BACKEND_CONTAINER_NAME  = "${env.PROJECT_NAME}-backend-${branchName}"
             env.FRONTEND_CONTAINER_NAME = "${env.PROJECT_NAME}-frontend-${branchName}"
             env.MONGO_CONTAINER_NAME    = "${env.PROJECT_NAME}-mongo-${branchName}"
 
-            echo "✅ Branch detected: ${env.COMPUTED_BRANCH}"
-            echo "✅ Docker Tag: ${env.DOCKER_TAG}"
+            echo "🎯 Checkout Summary:"
+            echo "   Branch: ${env.COMPUTED_BRANCH}"
+            echo "   Docker Tag: ${env.DOCKER_TAG}"
+            echo "   Backend Container: ${env.BACKEND_CONTAINER_NAME}"
+            echo "   Frontend Container: ${env.FRONTEND_CONTAINER_NAME}"
         }
-
-        echo "🔄 Đang checkout mã từ nhánh: ${env.COMPUTED_BRANCH}"
-        echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
-        echo "🔍 DEBUG - DOCKER_TAG = ${env.DOCKER_TAG}"
     }
 }
         // ========================================
@@ -126,9 +133,12 @@ pipeline {
                 echo "🔨 Đang build Docker image cho Backend"
                 dir('Backend') {
                     script {
-                        powershell '''
-                            docker build -t ${env:DOCKER_HUB}/${env:NAME_BACKEND}:${env:DOCKER_TAG} .
-                            docker tag ${env:DOCKER_HUB}/${env:NAME_BACKEND}:${env:DOCKER_TAG} ${env:DOCKER_HUB}/${env:NAME_BACKEND}:latest
+                        sh '''
+                            echo "Building Backend with tag: ${DOCKER_TAG}"
+                            docker build -t ${NAME_BACKEND}:${DOCKER_TAG} .
+                            docker tag ${NAME_BACKEND}:${DOCKER_TAG} ${NAME_BACKEND}:latest
+                            echo "✅ Backend build completed!"
+                            docker images | grep ${NAME_BACKEND}
                         '''
                     }
                 }
@@ -138,6 +148,7 @@ pipeline {
         // ========================================
         // GIAI ĐOẠN 3: BUILD FRONTEND
         // Build Docker image cho phần Frontend
+        
         // ========================================
         stage('Build Frontend') {
             when {
@@ -149,9 +160,12 @@ pipeline {
                 echo "🔨 Đang build Docker image cho Frontend"
                 dir('Frontend') {
                     script {
-                        powershell '''
-                            docker build -t ${env:DOCKER_HUB}/${env:NAME_FRONTEND}:${env:DOCKER_TAG} .
-                            docker tag ${env:DOCKER_HUB}/${env:NAME_FRONTEND}:${env:DOCKER_TAG} ${env:DOCKER_HUB}/${env:NAME_FRONTEND}:latest
+                        sh '''
+                            echo "Building Frontend with tag: ${DOCKER_TAG}"
+                            docker build -t ${NAME_FRONTEND}:${DOCKER_TAG} .
+                            docker tag ${NAME_FRONTEND}:${DOCKER_TAG} ${NAME_FRONTEND}:latest
+                            echo "✅ Frontend build completed!"
+                            docker images | grep ${NAME_FRONTEND}
                         '''
                     }
                 }
