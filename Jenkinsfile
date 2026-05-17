@@ -434,7 +434,6 @@ pipeline {
             }
         }
     }
-    }
 
     post {
         // Các hành động luôn được thực hiện
