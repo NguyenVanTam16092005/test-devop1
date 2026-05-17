@@ -69,38 +69,71 @@ pipeline {
     steps {
         checkout scm
         script {
-            // Đọc branch name - tối ưu cho Windows
-            String branchName = 'unknown'
+            // ========== DEBUG: Kiểm tra cấu trúc Git ==========
+            bat '''
+                @echo off
+                echo [DEBUG] Checking Git structure...
+                if exist .git\HEAD (
+                    echo [DEBUG] .git\HEAD exists
+                    type .git\HEAD
+                ) else (
+                    echo [DEBUG] .git\HEAD NOT FOUND
+                )
+                echo [DEBUG] Current commit:
+                git rev-parse HEAD
+                echo [DEBUG] All branches:
+                git branch -a
+            '''
+            
+            String branchName = 'develop'  // DEFAULT FALLBACK
             
             try {
-                // Phương pháp 1: Đọc trực tiếp từ .git/HEAD file (BEST FOR WINDOWS)
-                String headFile = readFile('.git/HEAD').trim()
-                if (headFile.startsWith('ref: ')) {
-                    branchName = headFile.replace('ref: refs/heads/', '').trim()
-                    echo "✅ Branch detected from .git/HEAD: ${branchName}"
-                } else {
-                    branchName = headFile.trim()
+                // Phương pháp 1: Đọc từ .git/HEAD file
+                String headFileContent = readFile('.git/HEAD').trim()
+                echo "[DEBUG] .git/HEAD content: ${headFileContent}"
+                
+                if (headFileContent.startsWith('ref: refs/heads/')) {
+                    branchName = headFileContent.replace('ref: refs/heads/', '').trim()
+                    echo "✅ Method 1 - Branch from .git/HEAD: ${branchName}"
                 }
             } catch (Exception e1) {
+                echo "⚠️ Method 1 failed: ${e1.message}"
+            }
+            
+            // Phương pháp 2: Dùng git command
+            if (branchName == 'develop') {
                 try {
-                    // Phương pháp 2: Dùng git command với bat (Windows)
-                    branchName = bat(
+                    def cmdOutput = bat(
                         returnStdout: true,
-                        script: '@echo off && git rev-parse --abbrev-ref HEAD'
+                        script: 'git rev-parse --abbrev-ref HEAD'
                     ).trim()
-                    echo "✅ Branch detected via git command: ${branchName}"
-                } catch (Exception e2) {
-                    // Phương pháp 3: Fallback
-                    branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'develop'
-                    if (branchName.contains('/')) {
-                        branchName = branchName.tokenize('/').last()
+                    if (cmdOutput && !cmdOutput.contains('fatal')) {
+                        branchName = cmdOutput
+                        echo "✅ Method 2 - Branch from git command: ${branchName}"
                     }
-                    echo "⚠️ Branch fallback to: ${branchName}"
+                } catch (Exception e2) {
+                    echo "⚠️ Method 2 failed: ${e2.message}"
                 }
             }
             
-            // Normalize: loại bỏ "origin/" prefix và whitespace
-            branchName = branchName.replace('origin/', '').replaceAll(/\s+/, '')
+            // Phương pháp 3: Từ Jenkins environment variables
+            if (branchName == 'develop' && env.BRANCH_NAME) {
+                branchName = env.BRANCH_NAME.tokenize('/').last()
+                echo "✅ Method 3 - Branch from env.BRANCH_NAME: ${branchName}"
+            }
+            
+            // Normalize: loại bỏ prefix và whitespace
+            branchName = branchName
+                .replace('origin/', '')
+                .replace('refs/heads/', '')
+                .replaceAll(/[\r\n\s]+$/, '')
+                .replaceAll(/^[\r\n\s]+/, '')
+            
+            // FINAL: Nếu vẫn rỗng thì dùng develop
+            if (!branchName || branchName == 'unknown' || branchName.isEmpty()) {
+                branchName = 'develop'
+                echo "⚠️ Branch fallback to default: develop"
+            }
             
             // Set environment variables
             env.COMPUTED_BRANCH = branchName
@@ -115,11 +148,13 @@ pipeline {
             echo "🎯 GIT CHECKOUT SUMMARY"
             echo "════════════════════════════════════════"
             echo "   ✓ Branch: ${env.COMPUTED_BRANCH}"
-            echo "   ✓ Commit: ${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
+            echo "   ✓ Commit: ${shortCommit}"
             echo "   ✓ Docker Tag: ${env.DOCKER_TAG}"
             echo "   ✓ Backend Container: ${env.BACKEND_CONTAINER_NAME}"
             echo "   ✓ Frontend Container: ${env.FRONTEND_CONTAINER_NAME}"
             echo "════════════════════════════════════════"
+            echo "ℹ️ Branch will trigger stages: (staging|main|develop)"
+            echo "ℹ️ Current branch '${env.COMPUTED_BRANCH}' matches pattern: ${env.COMPUTED_BRANCH ==~ /(staging|main|develop)/}"
         }
     }
 }
