@@ -69,24 +69,26 @@ pipeline {
     steps {
         checkout scm
         script {
-            // Đọc branch name từ .git/HEAD hoặc git command
+            // Đọc branch name - tối ưu cho Windows
             String branchName = 'unknown'
             
             try {
-                // Phương pháp 1: Dùng git rev-parse (RECOMMENDED - hoạt động trên Windows)
-                branchName = sh(
-                    returnStdout: true,
-                    script: 'git rev-parse --abbrev-ref HEAD'
-                ).trim()
-                echo "✅ Branch detected via git rev-parse: ${branchName}"
+                // Phương pháp 1: Đọc trực tiếp từ .git/HEAD file (BEST FOR WINDOWS)
+                String headFile = readFile('.git/HEAD').trim()
+                if (headFile.startsWith('ref: ')) {
+                    branchName = headFile.replace('ref: refs/heads/', '').trim()
+                    echo "✅ Branch detected from .git/HEAD: ${branchName}"
+                } else {
+                    branchName = headFile.trim()
+                }
             } catch (Exception e1) {
                 try {
-                    // Phương pháp 2: Đọc trực tiếp từ .git/HEAD file
-                    String headFile = readFile('.git/HEAD').trim()
-                    if (headFile.startsWith('ref: ')) {
-                        branchName = headFile.replace('ref: refs/heads/', '').trim()
-                        echo "✅ Branch detected from .git/HEAD: ${branchName}"
-                    }
+                    // Phương pháp 2: Dùng git command với bat (Windows)
+                    branchName = bat(
+                        returnStdout: true,
+                        script: '@echo off && git rev-parse --abbrev-ref HEAD'
+                    ).trim()
+                    echo "✅ Branch detected via git command: ${branchName}"
                 } catch (Exception e2) {
                     // Phương pháp 3: Fallback
                     branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: 'develop'
@@ -97,10 +99,8 @@ pipeline {
                 }
             }
             
-            // Normalize: loại bỏ "origin/" prefix nếu có
-            if (branchName.contains('origin/')) {
-                branchName = branchName.replace('origin/', '')
-            }
+            // Normalize: loại bỏ "origin/" prefix và whitespace
+            branchName = branchName.replace('origin/', '').replaceAll(/\s+/, '')
             
             // Set environment variables
             env.COMPUTED_BRANCH = branchName
@@ -111,11 +111,15 @@ pipeline {
             env.FRONTEND_CONTAINER_NAME = "${env.PROJECT_NAME}-frontend-${branchName}"
             env.MONGO_CONTAINER_NAME    = "${env.PROJECT_NAME}-mongo-${branchName}"
 
-            echo "🎯 Checkout Summary:"
-            echo "   Branch: ${env.COMPUTED_BRANCH}"
-            echo "   Docker Tag: ${env.DOCKER_TAG}"
-            echo "   Backend Container: ${env.BACKEND_CONTAINER_NAME}"
-            echo "   Frontend Container: ${env.FRONTEND_CONTAINER_NAME}"
+            echo "════════════════════════════════════════"
+            echo "🎯 GIT CHECKOUT SUMMARY"
+            echo "════════════════════════════════════════"
+            echo "   ✓ Branch: ${env.COMPUTED_BRANCH}"
+            echo "   ✓ Commit: ${env.GIT_COMMIT?.take(7) ?: 'unknown'}"
+            echo "   ✓ Docker Tag: ${env.DOCKER_TAG}"
+            echo "   ✓ Backend Container: ${env.BACKEND_CONTAINER_NAME}"
+            echo "   ✓ Frontend Container: ${env.FRONTEND_CONTAINER_NAME}"
+            echo "════════════════════════════════════════"
         }
     }
 }
@@ -133,12 +137,25 @@ pipeline {
                 echo "🔨 Đang build Docker image cho Backend"
                 dir('Backend') {
                     script {
-                        sh '''
-                            echo "Building Backend with tag: ${DOCKER_TAG}"
-                            docker build -t ${NAME_BACKEND}:${DOCKER_TAG} .
-                            docker tag ${NAME_BACKEND}:${DOCKER_TAG} ${NAME_BACKEND}:latest
-                            echo "✅ Backend build completed!"
-                            docker images | grep ${NAME_BACKEND}
+                        bat '''
+                            @echo off
+                            echo Building Backend with tag: %DOCKER_TAG%
+                            
+                            REM Check if Docker is installed
+                            where docker >nul 2>nul
+                            if errorlevel 1 (
+                                echo ⚠️ Docker is not installed. Skipping build.
+                                echo Installing dependencies instead...
+                                if exist package.json (
+                                    npm install
+                                )
+                            ) else (
+                                echo ✅ Docker found. Building image...
+                                docker build -t %NAME_BACKEND%:%DOCKER_TAG% .
+                                docker tag %NAME_BACKEND%:%DOCKER_TAG% %NAME_BACKEND%:latest
+                                echo ✅ Backend build completed!
+                                docker images | find "%NAME_BACKEND%"
+                            )
                         '''
                     }
                 }
@@ -148,7 +165,6 @@ pipeline {
         // ========================================
         // GIAI ĐOẠN 3: BUILD FRONTEND
         // Build Docker image cho phần Frontend
-        
         // ========================================
         stage('Build Frontend') {
             when {
@@ -160,12 +176,25 @@ pipeline {
                 echo "🔨 Đang build Docker image cho Frontend"
                 dir('Frontend') {
                     script {
-                        sh '''
-                            echo "Building Frontend with tag: ${DOCKER_TAG}"
-                            docker build -t ${NAME_FRONTEND}:${DOCKER_TAG} .
-                            docker tag ${NAME_FRONTEND}:${DOCKER_TAG} ${NAME_FRONTEND}:latest
-                            echo "✅ Frontend build completed!"
-                            docker images | grep ${NAME_FRONTEND}
+                        bat '''
+                            @echo off
+                            echo Building Frontend with tag: %DOCKER_TAG%
+                            
+                            REM Check if Docker is installed
+                            where docker >nul 2>nul
+                            if errorlevel 1 (
+                                echo ⚠️ Docker is not installed. Skipping build.
+                                echo Installing dependencies instead...
+                                if exist package.json (
+                                    npm install
+                                )
+                            ) else (
+                                echo ✅ Docker found. Building image...
+                                docker build -t %NAME_FRONTEND%:%DOCKER_TAG% .
+                                docker tag %NAME_FRONTEND%:%DOCKER_TAG% %NAME_FRONTEND%:latest
+                                echo ✅ Frontend build completed!
+                                docker images | find "%NAME_FRONTEND%"
+                            )
                         '''
                     }
                 }
