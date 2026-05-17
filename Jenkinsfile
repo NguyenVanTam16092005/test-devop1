@@ -72,21 +72,22 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // Lấy branch name từ Jenkins environment variables
-                    String branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'develop'
-                    
-                    // Clean branch name (remove origin/ prefix)
-                    if (branchName.contains('origin/')) {
-                        branchName = branchName.replaceAll('origin/', '')
+                    // Lấy branch name từ .git/HEAD file (không cần shell command)
+                    String branchName = 'develop'
+                    try {
+                        def headContent = readFile(file: '.git/HEAD').trim()
+                        // Format: "ref: refs/heads/develop"
+                        if (headContent.startsWith('ref:')) {
+                            branchName = headContent.replaceAll('ref: refs/heads/', '').replaceAll('ref: refs/remotes/origin/', '')
+                        }
+                    } catch (Exception e) {
+                        echo "Could not read .git/HEAD, using default: ${branchName}"
                     }
-                    
-                    // Clean newlines
-                    branchName = branchName.trim()
                     
                     // Set environment variables
                     env.COMPUTED_BRANCH = branchName
                     
-                    // Optional: Build docker tag with safe defaults
+                    // Build docker tag with commit hash
                     String commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
                     env.DOCKER_TAG = "${branchName.replace('/', '-')}-${commitHash}"
                     
@@ -96,8 +97,8 @@ pipeline {
                     env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
                     
                     // Log the values
-                    echo "Branch: ${env.COMPUTED_BRANCH}"
-                    echo "Docker Tag: ${env.DOCKER_TAG}"
+                    echo "✅ Branch detected: ${env.COMPUTED_BRANCH}"
+                    echo "✅ Docker Tag: ${env.DOCKER_TAG}"
                 }
                 echo "🔄 Đang checkout mã từ nhánh: ${env.COMPUTED_BRANCH}"
                 echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
