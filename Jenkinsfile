@@ -64,8 +64,8 @@ pipeline {
         githubPush()
     }
 
-        
-    stage('Checkout') {
+    stages {
+        stage('Checkout') {
     steps {
         checkout scm
         script {
@@ -433,6 +433,7 @@ pipeline {
                 }
             }
         }
+    }
     }
 
     post {
