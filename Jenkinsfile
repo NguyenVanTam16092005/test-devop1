@@ -72,39 +72,36 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // Lấy tên nhánh từ environment variable hoặc git config
-                    def branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'develop'
+                    // Lấy branch name từ Jenkins environment variables
+                    String branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'develop'
                     
-                    // Clean branch name (remove origin/ prefix if exists)
-                    if (branchName.startsWith('origin/')) {
-                        branchName = branchName.replace('origin/', '')
+                    // Clean branch name (remove origin/ prefix)
+                    if (branchName.contains('origin/')) {
+                        branchName = branchName.replaceAll('origin/', '')
                     }
                     
-                    // Get commit info using groovy
-                    def gitCommitMsg = ''
-                    def gitAuthor = ''
-                    try {
-                        gitCommitMsg = env.GIT_COMMIT_MSG ?: 'Unknown'
-                        gitAuthor = env.GIT_AUTHOR ?: 'Unknown'
-                    } catch (Exception e) {
-                        gitCommitMsg = 'Unknown'
-                        gitAuthor = 'Unknown'
-                    }
+                    // Clean newlines
+                    branchName = branchName.trim()
                     
+                    // Set environment variables
                     env.COMPUTED_BRANCH = branchName
-                    env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
+                    
+                    // Optional: Build docker tag with safe defaults
+                    String commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
+                    env.DOCKER_TAG = "${branchName.replace('/', '-')}-${commitHash}"
+                    
+                    // Container names
                     env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
                     env.FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${branchName}"
                     env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
-                    env.GIT_COMMIT_MSG = gitCommitMsg
-                    env.GIT_AUTHOR = gitAuthor
+                    
+                    // Log the values
+                    echo "Branch: ${env.COMPUTED_BRANCH}"
+                    echo "Docker Tag: ${env.DOCKER_TAG}"
                 }
-                echo "🔄 Đang checkout mã từ nhánh: ${COMPUTED_BRANCH}"
+                echo "🔄 Đang checkout mã từ nhánh: ${env.COMPUTED_BRANCH}"
                 echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
                 echo "🔍 DEBUG - DOCKER_TAG = ${env.DOCKER_TAG}"
-                echo "Commit: ${GIT_COMMIT}"
-                echo "Người commit: ${GIT_AUTHOR}"
-                echo "Tin nhắn: ${GIT_COMMIT_MSG}"
             }
         }
 
