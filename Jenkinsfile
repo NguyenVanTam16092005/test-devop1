@@ -73,7 +73,7 @@ pipeline {
                 checkout scm
                 script {
                     // Trích xuất tên nhánh từ lệnh git (hoạt động cho cả multibranch và non-multibranch pipelines)
-                    def branchName = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                    def branchName = powershell(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
                     if (!branchName || branchName == 'HEAD') {
                         // Fallback: lấy từ biến BRANCH_NAME (cho Multibranch Pipeline)
                         branchName = env.BRANCH_NAME ?: 'develop'
