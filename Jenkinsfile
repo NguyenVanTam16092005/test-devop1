@@ -49,6 +49,8 @@ pipeline {
     }
 
     options {
+        // Bỏ qua checkout mặc định để tránh checkout 2 lần
+        skipDefaultCheckout()
         // Giữ lại tối đa 10 build gần nhất
         buildDiscarder(logRotator(numToKeepStr: '10'))
         // Hết thời gian chờ sau 1 giờ
@@ -71,7 +73,11 @@ pipeline {
                 checkout scm
                 script {
                     // Trích xuất tên nhánh từ lệnh git (hoạt động cho cả multibranch và non-multibranch pipelines)
-                    def branchName = powershell(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                    def branchName = sh(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
+                    if (!branchName || branchName == 'HEAD') {
+                        // Fallback: lấy từ biến BRANCH_NAME (cho Multibranch Pipeline)
+                        branchName = env.BRANCH_NAME ?: 'develop'
+                    }
                     env.COMPUTED_BRANCH = branchName
                     env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
                     env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
