@@ -68,43 +68,46 @@ pipeline {
         // ========================================
         // GIAI ĐOẠN 1: CHECKOUT - Lấy mã nguồn
         // ========================================
-        stage('Checkout') {
-            steps {
-                checkout scm
-                script {
-                    // Lấy branch name từ .git/HEAD file (không cần shell command)
-                    String branchName = 'develop'
-                    try {
-                        def headContent = readFile(file: '.git/HEAD').trim()
-                        // Format: "ref: refs/heads/develop"
-                        if (headContent.startsWith('ref:')) {
-                            branchName = headContent.replaceAll('ref: refs/heads/', '').replaceAll('ref: refs/remotes/origin/', '')
-                        }
-                    } catch (Exception e) {
-                        echo "Could not read .git/HEAD, using default: ${branchName}"
+        script {
+    // Lấy tên branch từ Jenkins/Git
+    String branchName = env.BRANCH_NAME ?: env.GIT_BRANCH ?: env.CHANGE_BRANCH ?: ''
+
+    // Nếu Git plugin trả về origin/develop thì lấy develop
+    if (branchName.contains('/')) {
+        branchName = branchName.tokenize('/').last()
+    }
+
+    // Nếu vẫn rỗng hoặc HEAD thì dùng git command để dò branch chứa commit hiện tại
+    if (!branchName || branchName == 'HEAD') {
+        try {
+            branchName = powershell(
+                returnStdout: true,
+                script: '''
+                    $branch = git branch -r --contains HEAD | Select-String "origin/" | Select-Object -First 1
+                    if ($branch) {
+                        $branch.ToString().Trim().Replace("origin/","")
+                    } else {
+                        "develop"
                     }
-                    
-                    // Set environment variables
-                    env.COMPUTED_BRANCH = branchName
-                    
-                    // Build docker tag with commit hash
-                    String commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
-                    env.DOCKER_TAG = "${branchName.replace('/', '-')}-${commitHash}"
-                    
-                    // Container names
-                    env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
-                    env.FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${branchName}"
-                    env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
-                    
-                    // Log the values
-                    echo "✅ Branch detected: ${env.COMPUTED_BRANCH}"
-                    echo "✅ Docker Tag: ${env.DOCKER_TAG}"
-                }
-                echo "🔄 Đang checkout mã từ nhánh: ${env.COMPUTED_BRANCH}"
-                echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
-                echo "🔍 DEBUG - DOCKER_TAG = ${env.DOCKER_TAG}"
-            }
+                '''
+            ).trim()
+        } catch (Exception e) {
+            branchName = 'develop'
         }
+    }
+
+    env.COMPUTED_BRANCH = branchName
+
+    String commitHash = env.GIT_COMMIT ? env.GIT_COMMIT.take(7) : 'unknown'
+    env.DOCKER_TAG = "${branchName.replace('/', '-')}-${commitHash}"
+
+    env.BACKEND_CONTAINER_NAME = "${env.PROJECT_NAME}-backend-${branchName}"
+    env.FRONTEND_CONTAINER_NAME = "${env.PROJECT_NAME}-frontend-${branchName}"
+    env.MONGO_CONTAINER_NAME = "${env.PROJECT_NAME}-mongo-${branchName}"
+
+    echo "✅ Branch detected: ${env.COMPUTED_BRANCH}"
+    echo "✅ Docker Tag: ${env.DOCKER_TAG}"
+}
 
         // ========================================
         // GIAI ĐOẠN 2: BUILD BACKEND
