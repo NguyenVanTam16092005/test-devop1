@@ -69,70 +69,61 @@ pipeline {
     steps {
         checkout scm
         script {
-            // ========== DEBUG: Kiểm tra cấu trúc Git ==========
-            bat '''
-                @echo off
-                echo [DEBUG] Checking Git structure...
-                if exist .git\HEAD (
-                    echo [DEBUG] .git\HEAD exists
-                    type .git\HEAD
-                ) else (
-                    echo [DEBUG] .git\HEAD NOT FOUND
-                )
-                echo [DEBUG] Current commit:
-                git rev-parse HEAD
-                echo [DEBUG] All branches:
-                git branch -a
-            '''
-            
             String branchName = 'develop'  // DEFAULT FALLBACK
             
+            // ===== Method 1: Read .git/HEAD file directly =====
             try {
-                // Phương pháp 1: Đọc từ .git/HEAD file
                 String headFileContent = readFile('.git/HEAD').trim()
-                echo "[DEBUG] .git/HEAD content: ${headFileContent}"
+                echo "[DEBUG] .git/HEAD content: '${headFileContent}'"
                 
                 if (headFileContent.startsWith('ref: refs/heads/')) {
                     branchName = headFileContent.replace('ref: refs/heads/', '').trim()
-                    echo "✅ Method 1 - Branch from .git/HEAD: ${branchName}"
+                    echo "✅ SUCCESS - Branch from .git/HEAD: '${branchName}'"
+                } else if (headFileContent.length() > 0) {
+                    branchName = headFileContent.trim()
+                    echo "✅ SUCCESS - Branch (detached HEAD): '${branchName}'"
                 }
             } catch (Exception e1) {
-                echo "⚠️ Method 1 failed: ${e1.message}"
+                echo "⚠️ Method 1 failed (readFile): ${e1.message}"
             }
             
-            // Phương pháp 2: Dùng git command
+            // ===== Method 2: Try git command if Method 1 didn't work =====
             if (branchName == 'develop') {
                 try {
-                    def cmdOutput = bat(
+                    String gitOutput = sh(
                         returnStdout: true,
                         script: 'git rev-parse --abbrev-ref HEAD'
                     ).trim()
-                    if (cmdOutput && !cmdOutput.contains('fatal')) {
-                        branchName = cmdOutput
-                        echo "✅ Method 2 - Branch from git command: ${branchName}"
+                    
+                    echo "[DEBUG] git rev-parse output: '${gitOutput}'"
+                    
+                    if (gitOutput && gitOutput.length() > 0 && !gitOutput.contains('fatal')) {
+                        branchName = gitOutput.replaceAll(/[\r\n]+$/, '')
+                        echo "✅ SUCCESS - Branch from git command: '${branchName}'"
                     }
                 } catch (Exception e2) {
-                    echo "⚠️ Method 2 failed: ${e2.message}"
+                    echo "⚠️ Method 2 failed (git command): ${e2.message}"
                 }
             }
             
-            // Phương pháp 3: Từ Jenkins environment variables
+            // ===== Method 3: Jenkins environment variables =====
             if (branchName == 'develop' && env.BRANCH_NAME) {
-                branchName = env.BRANCH_NAME.tokenize('/').last()
-                echo "✅ Method 3 - Branch from env.BRANCH_NAME: ${branchName}"
+                branchName = env.BRANCH_NAME.tokenize('/').last().trim()
+                echo "✅ SUCCESS - Branch from env.BRANCH_NAME: '${branchName}'"
             }
             
-            // Normalize: loại bỏ prefix và whitespace
+            // ===== Normalize: Clean up branch name =====
             branchName = branchName
                 .replace('origin/', '')
                 .replace('refs/heads/', '')
                 .replaceAll(/[\r\n\s]+$/, '')
                 .replaceAll(/^[\r\n\s]+/, '')
+                .trim()
             
-            // FINAL: Nếu vẫn rỗng thì dùng develop
+            // Force minimum: always have a valid branch
             if (!branchName || branchName == 'unknown' || branchName.isEmpty()) {
                 branchName = 'develop'
-                echo "⚠️ Branch fallback to default: develop"
+                echo "⚠️ FALLBACK - No branch detected, using: ${branchName}"
             }
             
             // Set environment variables
