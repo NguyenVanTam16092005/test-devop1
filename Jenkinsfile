@@ -72,20 +72,32 @@ pipeline {
             steps {
                 checkout scm
                 script {
-                    // Trích xuất tên nhánh từ lệnh git (hoạt động cho cả multibranch và non-multibranch pipelines)
-                    def branchName = powershell(returnStdout: true, script: 'git rev-parse --abbrev-ref HEAD').trim()
-                    if (!branchName || branchName == 'HEAD') {
-                        // Fallback: lấy từ biến BRANCH_NAME (cho Multibranch Pipeline)
-                        branchName = env.BRANCH_NAME ?: 'develop'
+                    // Lấy tên nhánh từ environment variable hoặc git config
+                    def branchName = env.GIT_BRANCH ?: env.BRANCH_NAME ?: 'develop'
+                    
+                    // Clean branch name (remove origin/ prefix if exists)
+                    if (branchName.startsWith('origin/')) {
+                        branchName = branchName.replace('origin/', '')
                     }
+                    
+                    // Get commit info using groovy
+                    def gitCommitMsg = ''
+                    def gitAuthor = ''
+                    try {
+                        gitCommitMsg = env.GIT_COMMIT_MSG ?: 'Unknown'
+                        gitAuthor = env.GIT_AUTHOR ?: 'Unknown'
+                    } catch (Exception e) {
+                        gitCommitMsg = 'Unknown'
+                        gitAuthor = 'Unknown'
+                    }
+                    
                     env.COMPUTED_BRANCH = branchName
                     env.DOCKER_TAG = "${branchName.replace('/', '-')}-${GIT_COMMIT.take(7)}"
                     env.BACKEND_CONTAINER_NAME = "${PROJECT_NAME}-backend-${branchName}"
                     env.FRONTEND_CONTAINER_NAME = "${PROJECT_NAME}-frontend-${branchName}"
                     env.MONGO_CONTAINER_NAME = "${PROJECT_NAME}-mongo-${branchName}"
-                    
-                    env.GIT_COMMIT_MSG = powershell(returnStdout: true, script: 'git log -1 --pretty=%B').trim()
-                    env.GIT_AUTHOR = powershell(returnStdout: true, script: 'git log -1 --pretty=%an').trim()
+                    env.GIT_COMMIT_MSG = gitCommitMsg
+                    env.GIT_AUTHOR = gitAuthor
                 }
                 echo "🔄 Đang checkout mã từ nhánh: ${COMPUTED_BRANCH}"
                 echo "🔍 DEBUG - COMPUTED_BRANCH = ${env.COMPUTED_BRANCH}"
